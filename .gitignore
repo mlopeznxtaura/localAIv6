@@ -30,6 +30,16 @@ pipeline/cron_schedule.json
 pipeline/user_prompt.txt
 pipeline/pipeline_progress.json
 
+# Helper scripts (temporary)
+check_logs.py
+check_recent.py
+reset_tasks.py
+
+# Screenshots
+IMG_*.png
+*.png
+!architecture.png
+
 # Environment
 .env
 .env.local
