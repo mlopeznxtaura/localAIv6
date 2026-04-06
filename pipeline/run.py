@@ -28,6 +28,15 @@ STEPS = [
 ]
 
 
+def skip_ground_and_compress(intent: str):
+    """When compression=0, skip steps 0-1. Write raw intent directly for step 2."""
+    with open(HERE / "compressed_intent.txt", "w", encoding="utf-8") as f:
+        f.write(intent)
+    with open(HERE / "grounded_context.json", "w", encoding="utf-8") as f:
+        json.dump({"raw_intent": intent, "grounded": {"current_stack": [], "grounded_intent": intent}}, f)
+    print("[local-ai-v6] Compression=0 — skipping steps 0-1 (web grounding + compression)")
+
+
 def fire_initial_triggers(session_id: str):
     """Fire `at` trigger for root tasks (no dependencies). Everything else self-schedules."""
     tasks_file = HERE / "tasks.json"
@@ -72,10 +81,11 @@ def fire_initial_triggers(session_id: str):
 
 def main():
     session_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    aggressiveness = int(os.environ.get("COMPRESSION_AGGRESSIVENESS", "20"))
     env = {
         **os.environ,
         "LAV6_SESSION_ID": session_id,
-        "COMPRESSION_AGGRESSIVENESS": os.environ.get("COMPRESSION_AGGRESSIVENESS", "20")
+        "COMPRESSION_AGGRESSIVENESS": str(aggressiveness)
     }
 
     os.chdir(HERE)
@@ -90,9 +100,17 @@ def main():
         print("[local-ai-v6] ERROR: No intent. Usage: python3 run.py \"your intent\"")
         sys.exit(1)
     else:
+        with open(HERE / "user_prompt.txt", "r", encoding="utf-8") as f:
+            intent = f.read().strip()
         print(f"\n[local-ai-v6] Session: {session_id} (resuming)\n")
 
-    for num, script, label in STEPS:
+    # When compression=0, skip steps 0-1 entirely
+    steps_to_run = STEPS
+    if aggressiveness == 0:
+        skip_ground_and_compress(intent)
+        steps_to_run = STEPS[2:]  # skip step 0 and 1
+
+    for num, script, label in steps_to_run:
         print(f"\n{'='*48}")
         print(f"  STEP {num}/6 — {label}")
         print(f"{'='*48}")
