@@ -19,13 +19,28 @@ const STATUS_ICON = {
 export default function App() {
   const [intent, setIntent]           = useState('');
   const [aggressiveness, setAgg]       = useState(20);
-  const [phase, setPhase]             = useState('idle'); // idle | building | scheduled | done
+  const [phase, setPhase]             = useState('idle'); // idle | building | ready | scheduled | done
+  const [sessionId, setSessionId]     = useState('');
   const [tasks, setTasks]         = useState([]);
   const [training, setTraining]   = useState({ total: 0, clean: 0, completions: 0 });
   const [output, setOutput]       = useState({ ready: false, size_kb: 0 });
   const [log, setLog]             = useState('');
+  const [steps, setSteps]         = useState([]);
   const [error, setError]         = useState('');
   const pollRef                   = useRef(null);
+
+  // Parse step progress from log
+  useEffect(() => {
+    const stepRegex = /STEP (\d)\/6 — (.+)/g;
+    const found = [];
+    let match;
+    while ((match = stepRegex.exec(log)) !== null) {
+      found.push({ num: parseInt(match[1]), label: match[2] });
+    }
+    if (found.length > 0) {
+      setSteps(found);
+    }
+  }, [log]);
 
   // Poll tasks + training + output every 2s when scheduled
   useEffect(() => {
@@ -49,7 +64,8 @@ export default function App() {
     if (!intent.trim()) return;
     setPhase('building');
     setError('');
-    setLog('Running pipeline steps 0–6...');
+    setLog('');
+    setSteps([]);
     try {
       const res = await fetch(`${API}/api/build`, {
         method: 'POST',
@@ -62,11 +78,33 @@ export default function App() {
         setPhase('idle');
         return;
       }
+      setSessionId(data.session_id);
       setLog(data.log || '');
-      setPhase('scheduled');
+      // Fetch tasks immediately after pipeline completes
+      const tr = await fetch(`${API}/api/tasks`).then(r => r.json()).catch(() => ({ tasks: [] }));
+      setTasks(tr.tasks || []);
+      setPhase('ready');
     } catch (e) {
       setError(String(e));
       setPhase('idle');
+    }
+  };
+
+  const handleTrigger = async () => {
+    try {
+      const res = await fetch(`${API}/api/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Trigger failed');
+        return;
+      }
+      setPhase('scheduled');
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -145,7 +183,33 @@ export default function App() {
       {phase === 'building' && (
         <div style={styles.logBox}>
           <div style={styles.muted}>Running pipeline steps 0–6...</div>
+          {steps.length > 0 && (
+            <div style={styles.stepList}>
+              {steps.map((s, i) => (
+                <div key={s.num} style={{
+                  ...styles.stepItem,
+                  opacity: i === steps.length - 1 ? 1 : 0.5
+                }}>
+                  <span style={styles.stepNum}>{s.num}</span>
+                  <span>{s.label}</span>
+                  {i === steps.length - 1 && <span style={styles.stepActive}>running...</span>}
+                </div>
+              ))}
+            </div>
+          )}
           <pre style={styles.log}>{log}</pre>
+        </div>
+      )}
+
+      {phase === 'ready' && (
+        <div style={styles.readyBox}>
+          <div style={styles.muted}>Pipeline complete. {tasks.length} task(s) generated.</div>
+          <div style={styles.row}>
+            <button style={styles.triggerBtn} onClick={handleTrigger}>
+              ⚡ Trigger 1st Cron
+            </button>
+            <span style={styles.hint}>Starts root tasks — rest self-schedule</span>
+          </div>
         </div>
       )}
 
@@ -240,6 +304,16 @@ const styles = {
     fontSize: 10, color: '#444'
   },
   logBox: { background: '#141414', borderRadius: 8, padding: 16 },
+  readyBox: { background: '#141414', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 },
+  stepList: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 12, marginBottom: 8 },
+  stepItem: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#aaa' },
+  stepNum: { background: '#222', borderRadius: 4, padding: '2px 8px', fontSize: 11, fontFamily: 'monospace', color: '#e8e8e8' },
+  stepActive: { color: '#facc15', fontSize: 11, marginLeft: 'auto' },
+  triggerBtn: {
+    background: '#facc15', color: '#0c0c0c', border: 'none',
+    borderRadius: 8, fontSize: 14, fontWeight: 600,
+    padding: '10px 24px', cursor: 'pointer'
+  },
   log: { fontSize: 11, color: '#555', whiteSpace: 'pre-wrap', marginTop: 8, maxHeight: 200, overflow: 'auto' },
   muted: { fontSize: 13, color: '#555' },
   summaryBar: {

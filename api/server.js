@@ -22,7 +22,7 @@ if (fs.existsSync(UI_BUILD)) {
 const PIPELINE_DIR = path.join(__dirname, '..', 'pipeline');
 const PROJECT_ROOT = path.join(__dirname, '..');
 
-// POST /api/build — run pipeline steps 0-6 + fire initial at trigger
+// POST /api/build — run pipeline steps 0-6 (no triggers)
 app.post('/api/build', (req, res) => {
   const { intent, aggressiveness = 20 } = req.body;
   if (!intent) return res.status(400).json({ error: 'Missing intent' });
@@ -34,7 +34,7 @@ app.post('/api/build', (req, res) => {
   const cmd = [
     `cd ${PIPELINE_DIR}`,
     `echo ${JSON.stringify(intent)} > user_prompt.txt`,
-    `LAV6_SESSION_ID=${sessionId} CRON_FACTOR=${cronFactor} COMPRESSION_AGGRESSIVENESS=${agg} python3 run.py`
+    `LAV6_SESSION_ID=${sessionId} CRON_FACTOR=${cronFactor} COMPRESSION_AGGRESSIVENESS=${agg} python3 run.py --no-trigger`
   ].join(' && ');
 
   exec(cmd, { timeout: 600000 }, (err, stdout, stderr) => {
@@ -43,6 +43,45 @@ app.post('/api/build', (req, res) => {
     }
     res.json({ session_id: sessionId, log: stdout });
   });
+});
+
+// POST /api/trigger — fire `at` for root tasks (manual first trigger)
+app.post('/api/trigger', (req, res) => {
+  const { session_id } = req.body;
+  const tasksFile = path.join(PIPELINE_DIR, 'tasks.json');
+  const scheduleFile = path.join(PIPELINE_DIR, 'cron_schedule.json');
+
+  if (!fs.existsSync(tasksFile) || !fs.existsSync(scheduleFile)) {
+    return res.status(400).json({ error: 'No tasks or schedule found — run pipeline first' });
+  }
+
+  const tasks = JSON.parse(fs.readFileSync(tasksFile, 'utf8'));
+  const schedule = JSON.parse(fs.readFileSync(scheduleFile, 'utf8'));
+  const cronFactor = process.env.CRON_FACTOR || '10';
+  const aggressiveness = process.env.COMPRESSION_AGGRESSIVENESS || '20';
+  const sessionId = session_id || process.env.LAV6_SESSION_ID || 'manual';
+
+  const roots = schedule.filter(s => !s.depends_on || s.depends_on.length === 0);
+  const results = [];
+
+  for (const entry of roots) {
+    const delay = entry.delay_seconds || 30;
+    const taskId = entry.id;
+    const envStr = `LAV6_SESSION_ID=${sessionId} CRON_FACTOR=${cronFactor} COMPRESSION_AGGRESSIVENESS=${aggressiveness}`;
+    const cmd = `cd ${PIPELINE_DIR} && ${envStr} python3 build_one.py ${taskId}`;
+
+    try {
+      const proc = require('child_process').spawnSync('at', [`now + ${delay} seconds`], {
+        input: cmd + '\n',
+        encoding: 'utf8'
+      });
+      results.push({ task_id: taskId, scheduled: true, delay });
+    } catch (e) {
+      results.push({ task_id: taskId, scheduled: false, error: e.message });
+    }
+  }
+
+  res.json({ triggered: results.length, results });
 });
 
 // GET /api/tasks — current task status

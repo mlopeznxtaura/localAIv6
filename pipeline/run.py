@@ -82,6 +82,7 @@ def fire_initial_triggers(session_id: str):
 def main():
     session_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     aggressiveness = int(os.environ.get("COMPRESSION_AGGRESSIVENESS", "20"))
+    no_trigger = "--no-trigger" in sys.argv
     env = {
         **os.environ,
         "LAV6_SESSION_ID": session_id,
@@ -90,7 +91,7 @@ def main():
 
     os.chdir(HERE)
 
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 1 and sys.argv[1] != "--no-trigger":
         intent = " ".join(sys.argv[1:])
         with open(HERE / "user_prompt.txt", "w", encoding="utf-8") as f:
             f.write(intent)
@@ -119,7 +120,10 @@ def main():
             print(f"\n[local-ai-v6] FATAL: {script} failed. Halted.")
             sys.exit(1)
 
-    fire_initial_triggers(session_id)
+    if not no_trigger:
+        fire_initial_triggers(session_id)
+    else:
+        print(f"\n[local-ai-v6] --no-trigger: skipping initial triggers. Use UI 'Trigger 1st Cron' button.")
 
     print(f"\n{'='*48}")
     print(f"  PIPELINE SCHEDULED")
