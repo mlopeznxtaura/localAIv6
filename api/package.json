@@ -1,0 +1,14 @@
+{
+  "name": "local-ai-v6-api",
+  "version": "1.0.0",
+  "description": "local-ai-v6 Express API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.0"
+  }
+}
