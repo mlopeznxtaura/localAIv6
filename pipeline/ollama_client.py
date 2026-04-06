@@ -13,8 +13,8 @@ import requests
 from datetime import datetime, timezone
 from pathlib import Path
 
-OLLAMA_HOST = "http://172.30.80.1:11434"
-MODEL = "gemma4:26b"  # auto-patched by check.py
+OLLAMA_HOST = "http://localhost:11434"
+MODEL = "gemma4:26b-optimized"  # auto-patched by check.py
 
 BASE = Path(__file__).parent.parent
 TRAINING_DIR = BASE / "training_data"
