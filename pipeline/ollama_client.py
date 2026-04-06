@@ -74,7 +74,8 @@ def _write_training(record: dict):
     # Also write individual file for inspection
     session_dir = RAW_DIR / SESSION_ID
     session_dir.mkdir(exist_ok=True)
-    fname = f"step{record['step']}_{record['step_name']}_{record['substep']}_{record['call_index']}.json"
+    m = record["metadata"]
+    fname = f"step{m['step']}_{m['step_name']}_{m['substep']}_{m['call_index']}.json"
     (session_dir / fname).write_text(json.dumps(record, indent=2))
 
 
