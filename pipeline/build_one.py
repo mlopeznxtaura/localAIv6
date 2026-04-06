@@ -159,6 +159,9 @@ def main():
         print("Usage: python3 build_one.py <TASK_ID>")
         sys.exit(1)
 
+    # Change to project root so relative paths (output/, training_data/, etc.) work correctly
+    os.chdir(PROJECT_ROOT)
+
     task_id = sys.argv[1]
     tasks = load_tasks()
     tests = load_tests()
