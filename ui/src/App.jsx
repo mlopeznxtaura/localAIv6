@@ -2,6 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 
 const API = '';  // same origin — Express serves both
 
+const STEPS = [
+  { num: 0, label: 'Web Grounding' },
+  { num: 1, label: 'Prompt Compression' },
+  { num: 2, label: 'Mock UI Generation' },
+  { num: 3, label: 'Feature Parsing' },
+  { num: 4, label: 'DAG Construction' },
+  { num: 5, label: 'Task & Test Generation' },
+  { num: 6, label: 'Schedule' },
+];
+
 const STATUS_COLOR = {
   pending:  '#555',
   running:  '#facc15',
@@ -26,21 +36,35 @@ export default function App() {
   const [output, setOutput]       = useState({ ready: false, size_kb: 0 });
   const [log, setLog]             = useState('');
   const [steps, setSteps]         = useState([]);
+  const [currentStep, setCurrentStep] = useState(null);
   const [error, setError]         = useState('');
   const pollRef                   = useRef(null);
+  const progressRef               = useRef(null);
 
-  // Parse step progress from log
+  // Poll pipeline progress during building phase
   useEffect(() => {
-    const stepRegex = /STEP (\d)\/6 — (.+)/g;
-    const found = [];
-    let match;
-    while ((match = stepRegex.exec(log)) !== null) {
-      found.push({ num: parseInt(match[1]), label: match[2] });
+    if (phase === 'building') {
+      progressRef.current = setInterval(async () => {
+        try {
+          const p = await fetch(`${API}/api/progress`).then(r => r.json());
+          if (p.status === 'running' || p.status === 'complete') {
+            setCurrentStep({ num: p.current_step, label: p.label, status: p.status });
+            setSteps(prev => {
+              const exists = prev.find(s => s.num === p.current_step);
+              if (!exists) {
+                return [...prev, { num: p.current_step, label: p.label }];
+              }
+              return prev;
+            });
+          }
+          if (p.status === 'done') {
+            clearInterval(progressRef.current);
+          }
+        } catch (e) { /* ignore */ }
+      }, 500);
     }
-    if (found.length > 0) {
-      setSteps(found);
-    }
-  }, [log]);
+    return () => clearInterval(progressRef.current);
+  }, [phase]);
 
   // Poll tasks + training + output every 2s when scheduled
   useEffect(() => {
@@ -183,33 +207,50 @@ export default function App() {
       {phase === 'building' && (
         <div style={styles.logBox}>
           <div style={styles.muted}>Running pipeline steps 0–6...</div>
-          {steps.length > 0 && (
-            <div style={styles.stepList}>
-              {steps.map((s, i) => (
+          <div style={styles.stepList}>
+            {STEPS.filter(s => aggressiveness > 0 || s.num >= 2).map((s, i) => {
+              const isDone = steps.find(st => st.num === s.num);
+              const isCurrent = currentStep && currentStep.num === s.num;
+              const isPending = !isDone && !isCurrent;
+              return (
                 <div key={s.num} style={{
                   ...styles.stepItem,
-                  opacity: i === steps.length - 1 ? 1 : 0.5
+                  opacity: isPending ? 0.3 : 1,
+                  color: isCurrent ? '#facc15' : isDone ? '#4ade80' : '#aaa'
                 }}>
                   <span style={styles.stepNum}>{s.num}</span>
                   <span>{s.label}</span>
-                  {i === steps.length - 1 && <span style={styles.stepActive}>running...</span>}
+                  {isCurrent && <span style={styles.stepActive}>running...</span>}
+                  {isDone && <span style={{ marginLeft: 'auto', fontSize: 11 }}>✓</span>}
                 </div>
-              ))}
-            </div>
-          )}
-          <pre style={styles.log}>{log}</pre>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {phase === 'ready' && (
         <div style={styles.readyBox}>
-          <div style={styles.muted}>Pipeline complete. {tasks.length} task(s) generated.</div>
-          <div style={styles.row}>
-            <button style={styles.triggerBtn} onClick={handleTrigger}>
-              ⚡ Trigger 1st Cron
-            </button>
-            <span style={styles.hint}>Starts root tasks — rest self-schedule</span>
-          </div>
+          {tasks.length === 0 ? (
+            <>
+              <div style={{ color: '#f87171', fontSize: 14 }}>Pipeline completed but generated 0 tasks.</div>
+              <div style={styles.muted}>Check the logs below for details. The DAG may have been empty.</div>
+              <pre style={styles.log}>{log}</pre>
+              <div style={styles.row}>
+                <button style={styles.resetBtn} onClick={reset}>Try a different prompt</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={styles.muted}>Pipeline complete. {tasks.length} task(s) generated.</div>
+              <div style={styles.row}>
+                <button style={styles.triggerBtn} onClick={handleTrigger}>
+                  ⚡ Trigger 1st Cron
+                </button>
+                <span style={styles.hint}>Starts root tasks — rest self-schedule</span>
+              </div>
+            </>
+          )}
         </div>
       )}
 

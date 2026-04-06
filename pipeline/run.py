@@ -111,14 +111,29 @@ def main():
         skip_ground_and_compress(intent)
         steps_to_run = STEPS[2:]  # skip step 0 and 1
 
+    # Write step progress to a file for UI polling
+    progress_file = HERE / "pipeline_progress.json"
+
     for num, script, label in steps_to_run:
+        # Update progress file
+        progress = {"current_step": num, "label": label, "status": "running", "session_id": session_id}
+        progress_file.write_text(json.dumps(progress))
+
         print(f"\n{'='*48}")
         print(f"  STEP {num}/6 — {label}")
         print(f"{'='*48}")
         result = subprocess.run([sys.executable, script], cwd=HERE, env=env)
         if result.returncode != 0:
+            progress["status"] = "failed"
+            progress_file.write_text(json.dumps(progress))
             print(f"\n[local-ai-v6] FATAL: {script} failed. Halted.")
             sys.exit(1)
+
+        progress["status"] = "complete"
+        progress_file.write_text(json.dumps(progress))
+
+    # Final progress
+    progress_file.write_text(json.dumps({"current_step": 6, "label": "Complete", "status": "done", "session_id": session_id}))
 
     if not no_trigger:
         fire_initial_triggers(session_id)

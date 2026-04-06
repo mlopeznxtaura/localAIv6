@@ -84,7 +84,15 @@ app.post('/api/trigger', (req, res) => {
   res.json({ triggered: results.length, results });
 });
 
-// GET /api/tasks — current task status
+// GET /api/progress — live pipeline step progress
+app.get('/api/progress', (req, res) => {
+  const f = path.join(PIPELINE_DIR, 'pipeline_progress.json');
+  try {
+    res.json(JSON.parse(fs.readFileSync(f, 'utf8')));
+  } catch (e) {
+    res.json({ current_step: -1, label: '', status: 'idle' });
+  }
+});
 app.get('/api/tasks', (req, res) => {
   const f = path.join(PIPELINE_DIR, 'tasks.json');
   try {
