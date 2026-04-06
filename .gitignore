@@ -17,6 +17,17 @@ output/
 tool_cache/
 *.zip
 
+# Pipeline intermediate/output files
+pipeline/compressed_intent.txt
+pipeline/grounded_context.json
+pipeline/mock_ui.html
+pipeline/features.json
+pipeline/dag.json
+pipeline/tasks.json
+pipeline/tests.json
+pipeline/cron_schedule.json
+pipeline/user_prompt.txt
+
 # Environment
 .env
 .env.local

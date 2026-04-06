@@ -1,1 +1,0 @@
-Markdown note editor featuring a sidebar file list and local storage persistence.
